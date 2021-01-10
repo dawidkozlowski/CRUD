@@ -52,16 +52,7 @@ class ProjectController extends Controller
             'website_url' => 'required',
             'start_date' => 'required'
         ]);
-        $groups = [];
-        foreach ($request->all() as $key => $group) {
-//            dump($key);
-            $explodedKey = explode('_', $key);
-            if($explodedKey[0] == 'group') {
-                if ($group != '0') {
-                    $groups[$explodedKey[1]] = $group;
-                }
-            }
-        }
+
 
         $project = new Project();
         $project->name = $request->get('name');
@@ -69,26 +60,7 @@ class ProjectController extends Controller
         $project->active = $request->get('status');
         $project->save();
 
-        foreach ($groups as $key => $group){
-            $g = new ProjectGroup();
-            $g->project_id = $project->id;
-            $g->name = $group;
-            $g->budget = 0;
-            $g->save();
-            foreach ($request->campaign as $campaignKey => $campaign) {
-                if ($campaignKey == $key) {
-                    foreach ($campaign as $cmp) {
-                        $c = new ProjectGroupCampaign();
-                        $c->name = $cmp;
-                        $c->status = 0;
-                        $c->project_group_id = $g->id;
-                        $c->date_start = $request->get('start_date');
-                        $c->save();
-                        dump($c);
-                    }
-                }
-            }
-        }
+        $this->addGroupsAndCampaigns($request, $project);
 
         return redirect()->route('projects.index')
             ->with('success', 'Project created.');
@@ -128,15 +100,22 @@ class ProjectController extends Controller
      */
     public function update(Request $request, Project $project)
     {
-        dd($request->all());
         $request->validate([
             'name' => 'required',
             'website_url' => 'required',
             'start_date' => 'required'
         ]);
-        Project::updated($request->all());
 
-        return redirect()->route('index')
+        $project = Project::where('id', $request->get('project_id'))->first();
+        $project->name = $request->get('name');
+        $project->website = $request->get('website_url');
+        $project->active = $request->get('status');
+        $project->update();
+
+        $this->removeGroupsAndCampaign($project);
+        $this->addGroupsAndCampaigns($request, $project);
+
+        return redirect()->route('projects.index')
             ->with('success', 'Project updated.');
     }
 
@@ -149,6 +128,15 @@ class ProjectController extends Controller
      */
     public function destroy(Project $project)
     {
+        $this->removeGroupsAndCampaign($project);
+        $project->delete();
+
+        return redirect()->route('projects.index')
+            ->with('success', 'Project deleted.');
+    }
+
+    private function removeGroupsAndCampaign(Project $project)
+    {
         $groups = ProjectGroup::where('project_id', $project->id)->get();
         if (count($groups) > 0) {
             foreach ($groups as $group) {
@@ -156,9 +144,39 @@ class ProjectController extends Controller
                 $group->delete();
             }
         }
-        $project->delete();
+    }
 
-        return redirect()->route('projects.index')
-            ->with('success', 'Project deleted.');
+    private function addGroupsAndCampaigns(Request $request, Project $project)
+    {
+        $groups = [];
+        foreach ($request->all() as $key => $group) {
+//            dump($key);
+            $explodedKey = explode('_', $key);
+            if($explodedKey[0] == 'group') {
+                if ($group != '0') {
+                    $groups[$explodedKey[1]] = $group;
+                }
+            }
+        }
+
+        foreach ($groups as $key => $group){
+            $g = new ProjectGroup();
+            $g->project_id = $project->id;
+            $g->name = $group;
+            $g->budget = 0;
+            $g->save();
+            foreach ($request->campaign as $campaignKey => $campaign) {
+                if ($campaignKey == $key) {
+                    foreach ($campaign as $cmp) {
+                        $c = new ProjectGroupCampaign();
+                        $c->name = $cmp;
+                        $c->status = 0;
+                        $c->project_group_id = $g->id;
+                        $c->date_start = $request->get('start_date');
+                        $c->save();
+                    }
+                }
+            }
+        }
     }
 }
